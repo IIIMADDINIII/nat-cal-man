@@ -1,4 +1,10 @@
+pub mod common;
+pub mod send;
+pub mod recv;
 use anyhow::Result;
+use isahc::AsyncReadResponseExt;
+
+use self::{send::ToXML, recv::{FromXML, PropStat}};
 
 pub struct User<'a> {
     pub name: &'a str,
@@ -9,6 +15,8 @@ pub struct Dav<'a> {
     base_address: &'a str,
     authorization: Option<String>,
 }
+
+static GET_USER_PRINCIPAL_INFO_SET: send::PropFields =  send::PropFields::from_bits_truncate(0b00001111);
 
 impl<'a> Dav<'a> {
     pub fn new(base_address: &'a str) -> Self {
@@ -26,15 +34,38 @@ impl<'a> Dav<'a> {
     }
 
     pub fn set_auth(&mut self, username: &str, password: &str) {
-        self.authorization = Some(format!("Basic {}", base64::encode(format!("{username}:{password}"))));
+        self.authorization = Some(format!(
+            "Basic {}",
+            base64::encode(format!("{username}:{password}"))
+        ));
     }
 
-    pub async fn get_user_principal_info(&self, username: &str) -> Result<isahc::Response<isahc::AsyncBody>> {
-        Ok(self.propfind(&format!("/principals/users/{username}/"), vec![("depth", "0")], "").await?)
+    pub async fn get_user_principal_info(
+        &self,
+        username: &str,
+    ) -> Result<PropStat> {
+        println!("{}", &send::Propfind::new(GET_USER_PRINCIPAL_INFO_SET).xml());
+        Ok(self
+            .propfind(
+                &format!("/principals/users/{username}/"),
+                vec![("depth", "0")],
+                send::Propfind::new(GET_USER_PRINCIPAL_INFO_SET),
+            )
+            .await?)
     }
 
-    pub async fn propfind(&self, url: &str, headers: Vec<(&str, &str)>, body: &str) -> Result<isahc::Response<isahc::AsyncBody>> {
-        Ok(self.request(url, "PROPFIND", headers, body).await?)
+    pub async fn propfind(
+        &self,
+        url: &str,
+        headers: Vec<(&str, &str)>,
+        body: send::Propfind,
+    ) -> Result<PropStat> {
+        let mut response = self
+            .request(url, "PROPFIND", headers, &body.xml())
+            .await?;
+        let text = response.text().await?;
+        let result = recv::PropStat::xml(&text)?;
+        Ok(result)
     }
 
     async fn request(
@@ -45,14 +76,16 @@ impl<'a> Dav<'a> {
         body: &str,
     ) -> Result<isahc::Response<isahc::AsyncBody>> {
         let mut request = isahc::Request::builder();
-        request = request.method(method).uri(format!("{}{}", self.base_address, url)).version(isahc::http::Version::HTTP_2);
+        request = request
+            .method(method)
+            .uri(format!("{}{}", self.base_address, url))
+            .version(isahc::http::Version::HTTP_2);
         if let Some(authorization) = &self.authorization {
             request = request.header("authorization", authorization)
         }
         for header in headers.iter() {
             request = request.header(header.0, header.1)
         }
-        Ok(isahc::send_async(request.body(())?).await?)
+        Ok(isahc::send_async(request.body(body)?).await?)
     }
 }
-
