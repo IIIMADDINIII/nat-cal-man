@@ -1,37 +1,36 @@
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
+
+#[derive(serde::Deserialize)]
+pub struct SettingsCalenders {
+    personal: String,
+}
 
 #[derive(serde::Deserialize)]
 pub struct Settings {
     username: String,
     password: String,
+    calenders: SettingsCalenders,
 }
 
-pub struct Room<'a> {
-    dav: crate::Dav<'a>,
-    settings: &'a Settings,
-    displayname: String,
-    cal_inbox: String,
-    cal_outbox: String,
-    cal_home: String,
+pub struct Room {
+    dav: crate::Dav,
+    settings: Settings,
+    personal: crate::dav::Calendar,
 }
-
-impl<'a> Room<'a> {
-    pub async fn new(settings: &'a Settings, dav: &'a crate::Dav<'_>) -> Result<Room<'a>> {
+// 
+impl Room {
+    pub async fn new(settings: Settings, dav: &crate::Dav) -> Result<Self> {
         let mut dav = crate::Dav::from_dav(dav);
         dav.set_auth(&settings.username, &settings.password);
-        let mut this = Self {dav, settings, displayname: String::default(), cal_inbox: String::default(), cal_outbox: String::default(), cal_home: String::default()};
-        this.init().await?;
+        let principal_info = dav.get_user_principal_info(&settings.username).await?;
+        let base_path = principal_info.cal_home.with_context(|| format!{"There is no home for User {}", &settings.username})?;
+        let this =
+            Self {
+                personal: crate::dav::Calendar::new(&dav, format!("{}{}/", &base_path, &settings.calenders.personal))?,
+                dav,
+                settings,
+            };
         Ok(this)
-    }
-
-    async fn init(&mut self) -> Result<()> {
-        let principal_info = self.dav.get_user_principal_info(&self.settings.username).await?;
-        println!("{:?}", principal_info);
-        self.displayname = principal_info.displayname.with_context(|| format!("There is no displayname for User {}", self.settings.username))?;
-        self.cal_inbox = principal_info.cal_inbox.with_context(|| format!("There is no in_box for User {}", self.settings.username))?;
-        self.cal_outbox = principal_info.cal_outbox.with_context(|| format!("There is no out_box for User {}", self.settings.username))?;
-        self.cal_home = principal_info.cal_home.with_context(|| format!("There is no home for User {}", self.settings.username))?;
-        Ok(())
     }
 
     pub async fn try_connection(&self) -> Result<()> {

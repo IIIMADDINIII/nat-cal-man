@@ -6,7 +6,6 @@ pub trait FromXML {
     where
         Self: Sized,
     {
-        println!("{xml}");
         Ok(Self::element(&xml.parse()?)?)
     }
     fn element(element: &minidom::Element) -> Result<Self>
@@ -21,6 +20,7 @@ pub struct PropStat {
     pub cal_home: Result<String>,
     pub cal_inbox: Result<String>,
     pub cal_outbox: Result<String>,
+    pub get_c_tag: Result<String>,
 }
 
 impl PropStat {
@@ -30,6 +30,7 @@ impl PropStat {
             cal_home: Err(anyhow::Error::msg("cal_home was not a result")),
             cal_inbox: Err(anyhow::Error::msg("cal_inbox was not a result")),
             cal_outbox: Err(anyhow::Error::msg("cal_outbox was not a result")),
+            get_c_tag: Err(anyhow::Error::msg("cal_outbox was not a result")),
         }
     }
 }
@@ -67,6 +68,8 @@ impl FromXML for PropStat {
                     result.cal_inbox = (|| get_value(property.get_child("href", super::common::NAMESPACES.dav).context("href element not found")?))();
                 } else if property.is("schedule-outbox-URL", super::common::NAMESPACES.cal) {
                     result.cal_outbox = (|| get_value(property.get_child("href", super::common::NAMESPACES.dav).context("href element not found")?))();
+                } else if property.is("getctag", super::common::NAMESPACES.cs) {
+                    result.get_c_tag = get_value(property);
                 }
             }
         }

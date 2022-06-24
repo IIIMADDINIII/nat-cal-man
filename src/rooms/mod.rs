@@ -4,18 +4,18 @@ pub use room::Room;
 
 use anyhow::Result;
 
-pub struct Rooms<'a> {
-    pub rooms: Vec<Room<'a>>,
+pub struct Rooms {
+    pub rooms: Vec<Room>,
 }
 
-impl<'a> Rooms<'a> {
+impl Rooms {
     pub async fn new(
-        settings: &'a Vec<room::Settings>,
-        dav: &'a crate::Dav<'_>,
-    ) -> Result<Rooms<'a>> {
+        settings: Vec<room::Settings>,
+        dav: &crate::Dav,
+    ) -> Result<Rooms> {
         Ok(Self {
             rooms: futures::future::try_join_all(
-                settings.iter().map(|setting| Room::new(setting, &dav)),
+                settings.into_iter().map(|setting| Room::new(setting, &dav)),
             )
             .await?,
         })

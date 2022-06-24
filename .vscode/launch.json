@@ -16,8 +16,10 @@
       "program": "${cargo:program}",
       "args": [],
       "cwd": "${workspaceFolder}",
-      "terminal": "console"
-      
+      "terminal": "console",
+      "env": {
+        "RUST_BACKTRACE": "1"
+      }
     }
   ]
 }

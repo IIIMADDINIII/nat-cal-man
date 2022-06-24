@@ -1,6 +1,8 @@
 pub mod common;
 pub mod send;
 pub mod recv;
+pub mod calendar;
+pub use calendar::Calendar;
 use anyhow::Result;
 use isahc::AsyncReadResponseExt;
 
@@ -11,24 +13,24 @@ pub struct User<'a> {
     pub password: &'a str,
 }
 
-pub struct Dav<'a> {
-    base_address: &'a str,
+pub struct Dav {
+    base_address: String,
     authorization: Option<String>,
 }
 
 static GET_USER_PRINCIPAL_INFO_SET: send::PropFields =  send::PropFields::from_bits_truncate(0b00001111);
 
-impl<'a> Dav<'a> {
-    pub fn new(base_address: &'a str) -> Self {
+impl Dav {
+    pub fn new(base_address: String) -> Self {
         Self {
             base_address,
             authorization: None,
         }
     }
 
-    pub fn from_dav(dav: &'a Dav) -> Self {
+    pub fn from_dav(dav: &Dav) -> Self {
         Self {
-            base_address: dav.base_address,
+            base_address: dav.base_address.clone(),
             authorization: dav.authorization.clone(),
         }
     }
@@ -44,14 +46,17 @@ impl<'a> Dav<'a> {
         &self,
         username: &str,
     ) -> Result<PropStat> {
-        println!("{}", &send::Propfind::new(GET_USER_PRINCIPAL_INFO_SET).xml());
         Ok(self
             .propfind(
-                &format!("/principals/users/{username}/"),
+                &format!("/remote.php/dav/principals/users/{username}/"),
                 vec![("depth", "0")],
                 send::Propfind::new(GET_USER_PRINCIPAL_INFO_SET),
             )
             .await?)
+    }
+
+    pub async fn get_c_tag(&self, url: &str) -> Result<PropStat> {
+        Ok(self.propfind(url, vec![("depth", "0")], send::Propfind::new(send::PropFields::GET_C_TAG)).await?)
     }
 
     pub async fn propfind(

@@ -1,0 +1,12 @@
+{
+  cal_dav_address: "https://gemeinde.elend.name",
+  rooms: [
+    {
+      username: "kirche",
+      password: "Maddin123*",
+      calenders: {
+        personal: "personal",
+      },
+    },
+  ],
+}

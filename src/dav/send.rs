@@ -62,6 +62,12 @@ impl ToXML for Prop {
                 super::common::NAMESPACES.cal,
             ));
         }
+        if self.fields.contains(PropFields::GET_C_TAG) {
+            xml = xml.append(minidom::Element::builder(
+                "getctag",
+                super::common::NAMESPACES.cs,
+            ));
+        }
         xml.build()
     }
 }
@@ -72,5 +78,6 @@ bitflags::bitflags! {
     const CAL_HOME    = 0b00000010;
     const CAL_INBOX   = 0b00000100;
     const CAL_OUTBOX  = 0b00001000;
+    const GET_C_TAG   = 0b00010000;
   }
 }
