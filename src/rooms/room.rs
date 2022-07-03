@@ -26,7 +26,7 @@ impl Room {
         let base_path = principal_info.cal_home.with_context(|| format!{"There is no home for User {}", &settings.username})?;
         let this =
             Self {
-                personal: crate::dav::Calendar::new(&dav, format!("{}{}/", &base_path, &settings.calenders.personal))?,
+                personal: crate::dav::Calendar::new(&dav, format!("{}{}/", &base_path, &settings.calenders.personal)).await?,
                 dav,
                 settings,
             };

@@ -1,12 +1,15 @@
-pub mod common;
-pub mod send;
-pub mod recv;
 pub mod calendar;
-pub use calendar::Calendar;
+pub mod common;
+pub mod recv;
+pub mod send;
 use anyhow::Result;
+pub use calendar::Calendar;
 use isahc::AsyncReadResponseExt;
 
-use self::{send::ToXML, recv::{FromXML, PropStat}};
+use self::{
+    recv::{FromXML, MultiStatus, PropStat},
+    send::ToXML,
+};
 
 pub struct User<'a> {
     pub name: &'a str,
@@ -18,7 +21,10 @@ pub struct Dav {
     authorization: Option<String>,
 }
 
-static GET_USER_PRINCIPAL_INFO_SET: send::PropFields =  send::PropFields::from_bits_truncate(0b00001111);
+static GET_USER_PRINCIPAL_INFO_SET: send::PropFields =
+    send::PropFields::from_bits_truncate(0b00000011);
+static START_SYNC_SET: send::PropFields = send::PropFields::from_bits_truncate(0b00110000);
+static ALL_CAL_ENTRYS_SET: send::PropFields = send::PropFields::from_bits_truncate(0b11000000);
 
 impl Dav {
     pub fn new(base_address: String) -> Self {
@@ -42,34 +48,71 @@ impl Dav {
         ));
     }
 
-    pub async fn get_user_principal_info(
-        &self,
-        username: &str,
-    ) -> Result<PropStat> {
+    pub async fn get_user_principal_info(&self, username: &str) -> Result<recv::PropStat> {
         Ok(self
-            .propfind(
+            .propfind0(
                 &format!("/remote.php/dav/principals/users/{username}/"),
-                vec![("depth", "0")],
+                vec![],
                 send::Propfind::new(GET_USER_PRINCIPAL_INFO_SET),
             )
-            .await?)
+            .await?
+            .prop_stat)
     }
 
-    pub async fn get_c_tag(&self, url: &str) -> Result<PropStat> {
-        Ok(self.propfind(url, vec![("depth", "0")], send::Propfind::new(send::PropFields::GET_C_TAG)).await?)
+    pub async fn start_sync(&self, url: &str) -> Result<recv::PropStat> {
+        Ok(self
+            .propfind0(url, vec![], send::Propfind::new(START_SYNC_SET))
+            .await?
+            .prop_stat)
     }
 
-    pub async fn propfind(
+    pub async fn propfind0(
         &self,
         url: &str,
         headers: Vec<(&str, &str)>,
         body: send::Propfind,
-    ) -> Result<PropStat> {
+    ) -> Result<recv::Response> {
         let mut response = self
-            .request(url, "PROPFIND", headers, &body.xml())
+            .request(
+                url,
+                "PROPFIND",
+                headers.into_iter().chain(vec![("depth", "0")]).collect(),
+                &body.xml(),
+            )
             .await?;
         let text = response.text().await?;
-        let result = recv::PropStat::xml(&text)?;
+        let result = recv::MultiStatus::xml(&text)?.response.remove(0);
+        if result.href != url {
+            return Err(anyhow::Error::msg("Response has wrong URL"));
+        }
+        Ok(result)
+    }
+
+    pub async fn all_cal_entrys(&self, url: &str) -> Result<recv::MultiStatus> {
+        Ok(self
+            .report1(url, vec![], send::CalendarQuery::new(ALL_CAL_ENTRYS_SET))
+            .await?)
+    }
+
+    pub async fn report1(
+        &self,
+        url: &str,
+        headers: Vec<(&str, &str)>,
+        body: send::CalendarQuery,
+    ) -> Result<recv::MultiStatus> {
+        let mut response = self
+            .request(
+                url,
+                "REPORT",
+                headers.into_iter().chain(vec![("depth", "1")]).collect(),
+                &body.xml(),
+            )
+            .await?;
+        let text = response.text().await?;
+        let result = recv::MultiStatus::xml(&text)?;
+        if result.response.iter().any(|e| !e.href.starts_with(url)) {
+            return Err(anyhow::Error::msg("Response has wrong URL"));
+        }
         Ok(result)
     }
 
